@@ -1381,22 +1381,20 @@ MonoBehaviour:
   m_GameObject: {fileID: 1727408321}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f67c7e722ba14acd9153bb4488bff6e4, type: 3}
+  m_Script: {fileID: 11500000, guid: 5706390054b35084388dabc38f70c881, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_SensorName: RayPerceptionSensor
-  m_DetectableTags:
+  _sensorName: RPLidar
+  _detectableTags:
   - Wall
-  m_RaysPerDirection: 0
-  m_MaxRayDegrees: 0
-  m_SphereCastRadius: 0
-  m_RayLength: 500
-  m_RayLayerMask:
+  _lazarLength: 50
+  _currentAngle: 90
+  _lazarLayerMask:
     serializedVersion: 2
     m_Bits: 4294967291
-  m_ObservationStacks: 1
-  rayHitColor: {r: 0.024207829, g: 0.9622642, b: 0.20850152, a: 1}
-  rayMissColor: {r: 0.990566, g: 0.024919821, b: 0.024919821, a: 1}
+  _observationStacks: 1
+  _hitColor: {r: 0.015278174, g: 0.9716981, b: 0.12234612, a: 1}
+  _missColor: {r: 1, g: 0.06289297, b: 0.06289297, a: 1}
 --- !u!1 &1966833592
 GameObject:
   m_ObjectHideFlags: 0

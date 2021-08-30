@@ -105,6 +105,8 @@
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\ModelOverrider.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\AdjustTrainingTimescale.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Soccer\Scripts\SoccerSettings.cs" />
+     <Compile Include="Assets\Scripts\LazarSensor.cs" />
+     <Compile Include="Assets\Scripts\RPLidar.cs" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\GridPatternShader.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderOutline.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderRadialGrid.shader" />
