@@ -42,6 +42,7 @@
      <Compile Include="Assets\ML-Agents\Examples\PushBlock\Scripts\PushAgentCollab.cs" />
      <Compile Include="Assets\ML-Agents\Examples\PushBlock\Scripts\GoalDetect.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\DirectionIndicator.cs" />
+     <Compile Include="Assets\Scripts\Lidar.cs" />
      <Compile Include="Assets\ML-Agents\TestScenes\TestCompressedTexture\TestTextureSensor.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Basic\Scripts\BasicController.cs" />
      <Compile Include="Assets\Scripts\Wall.cs" />
@@ -63,7 +64,6 @@
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\TargetController.cs" />
      <Compile Include="Assets\Scripts\MoveToGoalAgent.cs" />
      <Compile Include="Assets\Scripts\Goal.cs" />
-     <Compile Include="Assets\Scripts\WheelFrameJoint.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Match3\Scripts\Match3TileSelector.cs" />
      <Compile Include="Assets\ML-Agents\Examples\DungeonEscape\Scripts\PushAgentEscape.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Match3\Scripts\Match3Board.cs" />
@@ -83,13 +83,11 @@
      <Compile Include="Assets\Scripts\PlayerControls.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\CameraFollow.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Hallway\Scripts\HallwayAgent.cs" />
-     <Compile Include="Assets\Scripts\NavigationAgent.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\FlyCamera.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Crawler\Scripts\CrawlerAgent.cs" />
      <Compile Include="Assets\ML-Agents\Examples\FoodCollector\Scripts\FoodLogic.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Sorter\Scripts\SorterAgent.cs" />
      <Compile Include="Assets\ML-Agents\Examples\PushBlock\Scripts\GoalDetectTrigger.cs" />
-     <Compile Include="Assets\Scripts\Rotate.cs" />
      <Compile Include="Assets\ML-Agents\Examples\PushBlock\Scripts\PushBlockSettings.cs" />
      <Compile Include="Assets\ML-Agents\Examples\PushBlock\Scripts\PushAgentBasic.cs" />
      <Compile Include="Assets\ML-Agents\Examples\DungeonEscape\Scripts\DungeonEscapeEnvController.cs" />
@@ -105,8 +103,7 @@
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\ModelOverrider.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\AdjustTrainingTimescale.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Soccer\Scripts\SoccerSettings.cs" />
-     <Compile Include="Assets\Scripts\LazarSensor.cs" />
-     <Compile Include="Assets\Scripts\RPLidar.cs" />
+     <Compile Include="Assets\Scripts\test.cs" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\GridPatternShader.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderOutline.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderRadialGrid.shader" />
