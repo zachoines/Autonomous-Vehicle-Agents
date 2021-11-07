@@ -30,6 +30,7 @@ public class MecanumDriveController : Agent
     [SerializeField]
     private float torque = 24.3f;
     
+    // Wheel components here
     [SerializeField] 
     private ArticulationBody TL = null;
     [SerializeField] 
@@ -39,7 +40,10 @@ public class MecanumDriveController : Agent
     [SerializeField] 
     private ArticulationBody BR = null;
     
-    
+    // Lidar component here
+    [SerializeField]
+    private Lidar lidar = null;
+
 
     [SerializeField]
     private float thrust = 10;
@@ -74,7 +78,8 @@ public class MecanumDriveController : Agent
 
     public override void CollectObservations(VectorSensor sensor) 
     {
-        
+        List<Packet> packets = lidar.UpdateSensor();
+        var cat = "moew";
     }
 
     public override void OnActionReceived(ActionBuffers actions)

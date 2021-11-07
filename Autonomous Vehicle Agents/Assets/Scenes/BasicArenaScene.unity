@@ -874,13 +874,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2037906493}
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalRotation: {x: 0.5, y: 0.5, z: 0.5, w: 0.5}
   m_LocalPosition: {x: -0.036, y: -0.1769, z: 0.0638}
   m_LocalScale: {x: 0.05, y: 0.01, z: 0.05}
   m_Children: []
   m_Father: {fileID: 543450652064669289}
   m_RootOrder: 4
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 90, z: 90}
 --- !u!54 &2037906496
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2298,6 +2298,7 @@ MonoBehaviour:
   TR: {fileID: 2738759585691572354}
   BL: {fileID: 6507992048077300784}
   BR: {fileID: 5592069543123709401}
+  lidar: {fileID: 2037906500}
   thrust: 10
 --- !u!114 &919132147610322135
 MonoBehaviour:

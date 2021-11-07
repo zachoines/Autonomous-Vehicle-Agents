@@ -123,9 +123,9 @@ public struct LaserOutput
 }
 
 
-public struct packet {
-    float distance;
-    float angle;
+public struct Packet {
+    public float distance;
+    public float theta;
 }
 
 public class Lidar : MonoBehaviour {
@@ -201,41 +201,41 @@ public class Lidar : MonoBehaviour {
     private LaserOutput lastOutput;
     private Vector3 lastRotation;
     private bool running = false;
-    private float currentPlanarRotation = 0.0f;
+    
 
+    public List<Packet> UpdateSensor(bool debug = false, int numSamples = 360, float degrees = 360.0f) {
+        List<Packet> packets = new List<Packet>();
+        List<LaserInput> inputs = GenerateInputScanData(numSamples, degrees);
+        List<LaserOutput> scanResults = FullScan(inputs);
 
-    List<packet> getLatestScanData() {
-        List<packet> packets = new List<packet>();
+        foreach (LaserOutput scan in scanResults) {
+            Packet packet = new Packet() {
+                theta = getPlanarRotation(scan.theta),
+                distance = scan.distance
+            };
+            packets.Add(packet); 
+        }
+
+        if (debug) {
+            DrawOutput(scanResults.Last());
+        }
+
         return packets;
     }
-    
-    void FixedUpdate()
-    {
-        // Determine number of scans and angle travel
-        float desiredRotation = Time.deltaTime * rotationSpeed;
-        int steps = (int)(Time.deltaTime * (float)numDetections);
-        
-        List<LaserInput> inputs = GenerateInputScanData(steps, desiredRotation);
-        List<LaserOutput> scanResults = FullScan(inputs);
-        
+    void Update()
+    {        
         // Rotate the objects transform to new angle location
-        // transform.Rotate(rotationDirection, Time.deltaTime * rotationSpeed, Space.World);
+        float desiredRotation = Time.deltaTime * rotationSpeed;
+        
+        // Rotation is for introducing non-deterministic angles when calling UpdateSensor(). Also looks cool.
+        transform.Rotate(rotationDirection, desiredRotation, Space.World);
 
-        // Lock the rotation
+        // Lock orientation
         Vector3 currentRotation = transform.eulerAngles;
         currentRotation.x = currentRotation.x * rotationDirection.x;
         currentRotation.y = currentRotation.y * rotationDirection.y;
         currentRotation.z = currentRotation.z * rotationDirection.z;
         transform.eulerAngles = currentRotation;
-
-        currentPlanarRotation = (desiredRotation + currentPlanarRotation) % 360.0f;
-
-        // Draw the final orientation of laser
-        lastOutput = scanResults[steps - 1];
-
-        // foreach (LaserOutput scan in scanResults) {
-        //     DrawOutput(scan);
-        // }
     }
 
     private void LateUpdate() {
@@ -318,14 +318,14 @@ public class Lidar : MonoBehaviour {
     }
 
     private List<LaserInput> GenerateInputScanData(int numberOfScans, float range) {
-
-        List<LaserInput> inputs = new List<LaserInput>();
-        float currentLocalRotation = currentPlanarRotation;
         
-        float step = range / (float)numberOfScans;
-        for (float angle = currentLocalRotation; angle < currentLocalRotation + range; angle += step) {
+        List<LaserInput> inputs = new List<LaserInput>();
+        float currentRotation = getPlanarRotation(transform.localRotation.eulerAngles);
+        
+        float step = range / (float)(numberOfScans);
+        for (float angle = currentRotation; angle <= (currentRotation + range); angle += step) {
             LaserInput input = GetInput();
-            input.LaserOrientation = (rotationDirection * angle) + LaserOrientation;
+            input.LaserOrientation = (rotationDirection * (angle % 360f)) + LaserOrientation;
             inputs.Add(input);
         }
 
@@ -345,6 +345,23 @@ public class Lidar : MonoBehaviour {
         return outputs;
     }
 
+    // <summary>
+    // Get the current planar rotation based on rotation direction
+    // </summary>
+    // <returns>The current orientation along the configured plane of rotation </returns>
+    public float getPlanarRotation(Vector3 rotation) {
+        float currentPlanarRotation = 0.0f;
+        if (rotationDirection.y > 0.0f) {
+            currentPlanarRotation = rotation.y;
+        } else if (rotationDirection.x > 0.0f) {
+            currentPlanarRotation = rotation.x;
+        } else {
+            currentPlanarRotation = rotation.z;
+        }
+
+        return currentPlanarRotation;
+    }
+
     void OnDrawGizmosSelected()
     {
         if (!running) {
@@ -352,7 +369,9 @@ public class Lidar : MonoBehaviour {
             LaserOutput output = Perceive(LaserInput);
             DrawRaycastGizmos(output);
         } else {
-            DrawOutput(lastOutput);
+            LaserInput LaserInput = GetInput();
+            LaserOutput output = Perceive(LaserInput);
+            DrawOutput(output);
         }
     }
 
