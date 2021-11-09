@@ -12,6 +12,66 @@ using Unity.MLAgents.Sensors;
     in quadrate of encoders. Distance traveled is inferred by wheel Diameter.
 */
 
+public enum Q {
+    I,
+    II,
+    III,
+    IV, 
+    none          
+};
+
+struct MecanumDrives {
+    public float TL;
+    public float TR;
+    public float BL;
+    public float BR;
+
+    public static MecanumDrives operator +(MecanumDrives a, MecanumDrives b) {
+        return new MecanumDrives() {
+            TL = Mathf.Clamp(a.TL + b.TL, -1f, 1f),
+            TR = Mathf.Clamp(a.TR + b.TR, -1f, 1f),
+            BL = Mathf.Clamp(a.BL + b.BL, -1f, 1f),
+            BR = Mathf.Clamp(a.BR + b.BR, -1f, 1f)
+        };
+    }
+}
+
+public struct LineVector 
+{
+    private Vector2 p;
+    private Vector2 q;
+
+    public float X; // X component
+    public float Y; // Y component
+    public float M; // Magnitude
+    public float A; // Angle of unit circle 
+
+    public LineVector(Vector2 p1, Vector2 p2) {
+        p = p1;
+        q = p2;
+        X = q.x - p.x;
+        Y = q.y - p.y;
+        M = Mathf.Sqrt(Mathf.Pow(X, 2) + Mathf.Pow(Y, 2));
+        A = Mathf.Atan2(Y, X);
+        A *= 180f / Mathf.PI; // To degrees -180 <-> 180
+        A = A < 0f ? A + 360f : A;  // To 0 <-> 360
+    }
+};
+
+/* 
+  Ensure motors are laid out in this fashion:
+
+  (M1)  TL _____TR (M2)
+          |     |
+          |     |
+          |_____|
+  (M2)  BL       BR (M1)
+  (Left)         (Right) 
+  
+  Left motor channel: TR <---> BR
+  Right motor channel: TL <---> BL
+  
+*/
 public class MecanumDriveController : Agent
 {
     // PPR
@@ -78,20 +138,21 @@ public class MecanumDriveController : Agent
 
     public override void CollectObservations(VectorSensor sensor) 
     {
+    
         List<Packet> packets = lidar.UpdateSensor();
-        var cat = "moew";
+        
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        float trSpeed = actions.ContinuousActions[0];
-        float brSpeed = actions.ContinuousActions[1];
-        float tlSpeed = actions.ContinuousActions[2];
-        float blSpeed = actions.ContinuousActions[3];
-    
-        setWheel(TR, trSpeed);
+        float tlSpeed = actions.ContinuousActions[0];
+        float trSpeed = actions.ContinuousActions[1];
+        float blSpeed = actions.ContinuousActions[2];
+        float brSpeed = actions.ContinuousActions[3];
+        
+        setWheel(TR, -trSpeed);
         setWheel(BL, blSpeed);
-        setWheel(TL, tlSpeed);
+        setWheel(TL, -tlSpeed);
         setWheel(BR, brSpeed);
     }
 
@@ -101,20 +162,19 @@ public class MecanumDriveController : Agent
             
         Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
         Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
-        float switched = playerController.Robot.Switch.ReadValue<float>();
 
-        if (switched <= 0.0) {
-            continousActions[0] = r.y;
-            continousActions[1] = l.y;
-            continousActions[2] = l.y;
-            continousActions[3] = r.y;
-            
-        } else {
-            continousActions[0] = r.y;
-            continousActions[1] = r.y;
-            continousActions[2] = l.y;
-            continousActions[3] = l.y;
-        }
+        MecanumDrives fullDrives = GetAngularDrives(new LineVector(
+            Vector2.zero, 
+            l
+        )) + GetLinearDrives(new LineVector(
+            Vector2.zero,
+            r
+        ));
+
+        continousActions[0] = fullDrives.TL;
+        continousActions[1] = fullDrives.TR;
+        continousActions[2] = fullDrives.BL;
+        continousActions[3] = fullDrives.BR;
     }
 
      private void OnTriggerEnter(Collider other) {
@@ -128,45 +188,6 @@ public class MecanumDriveController : Agent
             EndEpisode();
         }
     }
-
-    // private void SetDriveRotation(ArticulationBody body, Quaternion targetLocalRotation)
-    // {
-    //     Vector3 target = this.ToTargetRotationInReducedSpace(body, targetLocalRotation);
-
-    //     // assign to the drive targets...
-    //     ArticulationDrive xDrive = body.xDrive;
-    //     xDrive.target = target.x;
-    //     body.xDrive = xDrive;
-    // }
-
-    // private Vector3 ToTargetRotationInReducedSpace(ArticulationBody body, Quaternion targetLocalRotation)
-    // {
-    //     if (body.isRoot)
-    //         return Vector3.zero;
-    //     Vector3 axis;
-    //     float angle;
-
-    //     //Convert rotation to angle-axis representation (angles in degrees)
-    //     targetLocalRotation.ToAngleAxis(out angle, out axis);
-
-    //     // Converts into reduced coordinates and combines rotations (anchor rotation and target rotation)
-    //     Vector3 rotInReducedSpace = Quaternion.Inverse(body.anchorRotation) * axis * angle;
-
-    //     return rotInReducedSpace;
-    // }
-
-    // // TODO: Figure this shit out
-    // private Quaternion calcTargetLocalRotation(ArticulationBody body, float speed) {
-    //     // float currentRotation = GetAxisRotation(body);
-    //     // float rotationGoal = currentRotation + (Time.fixedDeltaTime * (speed * Mathf.Rad2Deg));
-    //     // return Quaternion.Euler(rotationGoal, 0, 0);
-    //     // Quaternion rotation = body.transform.localRotation;
-    //     return Quaternion.Euler(Vector3.forward * 10.0f);
-    // }
-
-    // private void rotate(ArticulationBody body) {
-    //     SetDriveRotation(body, calcTargetLocalRotation(body, max_rads_per_second));
-    // }
 
     private float angleToEncoderTicks(float angle) {
         float ratio = encoderResolution / 360.0f; 
@@ -222,5 +243,90 @@ public class MecanumDriveController : Agent
         float degrees_sec = (speed * max_degs_per_second);
         float rotationGoal = GetAxisRotation(wheel) + (degrees_sec * Time.fixedDeltaTime);
         setDrive(rotationGoal, wheel);
+    }
+
+    private Q quadrant(double angle) {
+        if (angle >= 0.0 && angle < 90.0) return Q.I;
+        if (angle >= 90.0 && angle < 180.0) return Q.II;
+        if (angle >= 180.0 && angle < 270.0) return Q.III;
+        if (angle >= 270.0 && angle < 360.0) return Q.IV;
+        return Q.none;
+    }
+
+    MecanumDrives GetAngularDrives(LineVector rotation) {
+        MecanumDrives drives;
+        float dir = rotation.X > 0f ? 1f : -1f;
+        float r = -dir * rotation.M;
+        float l = dir * rotation.M;
+        drives.TL = -l;
+        drives.TR = -r;
+        drives.BL = l;
+        drives.BR = r;
+        return drives;
+    }
+
+    MecanumDrives GetLinearDrives(LineVector direction) {
+        MecanumDrives currentDrives;
+        float angle = direction.A;
+        float magnitude = direction.M;
+        float RRatio = 1.0f; // Ratio between Left and Right motor drivers 
+        float LRatio = 1.0f;
+        float LDrive = 1.0f; // Controls M1 <---> M4
+        float RDrive = 1.0f; // Controls M2 <---> M3
+
+        switch (quadrant(angle)) {
+            case Q.I:
+                // LRatio constant: 1.0
+                // angle = 45 * (1.0 + RRatio)
+                RRatio = (angle / 45.0f) - 1.0f;
+                RDrive = RRatio * magnitude;
+                LDrive = LRatio * magnitude;    
+                currentDrives.TL = -LDrive;
+                currentDrives.TR = -RDrive;
+                currentDrives.BL = RDrive;
+                currentDrives.BR = LDrive;
+                break;
+            case Q.II:
+                // RRatio constant: 1.0
+                // angle = 45 * (1.0 - LRatio) + 90
+                LRatio = -((angle - 90.0f) / 45.0f) + 1.0f;
+                RDrive = RRatio * magnitude;
+                LDrive = LRatio * magnitude;
+                currentDrives.TL = -LDrive;
+                currentDrives.TR = -RDrive;
+                currentDrives.BL = RDrive;
+                currentDrives.BR = LDrive;
+                break;
+            case Q.III:
+                // LRatio constant: -1.0
+                // angle = 45 * ((-RRatio) - (- 1)) + 180
+                RRatio = -((angle - 180.0f) / 45.0f) + 1.0f;
+                RDrive = RRatio * magnitude;
+                LDrive = LRatio * magnitude;
+                currentDrives.TL = LDrive;
+                currentDrives.TR = -RDrive;
+                currentDrives.BL = RDrive;
+                currentDrives.BR = -LDrive;
+                break;
+            case Q.IV:
+                // RRatio constant: -1.0
+                // angle = 45 * (1 + LRatio)) + 270.0
+                LRatio = ((angle - 270.0f) / 45.0f) - 1.0f;
+                RDrive = RRatio * magnitude;
+                LDrive = LRatio * magnitude;
+                currentDrives.TL = -LDrive;
+                currentDrives.TR = RDrive;
+                currentDrives.BL = -RDrive;
+                currentDrives.BR = LDrive;
+                break;
+            default:
+                currentDrives.TL = 0f;
+                currentDrives.TR = 0f;
+                currentDrives.BL = 0f;
+                currentDrives.BR = 0f;
+                break;
+        }
+
+        return currentDrives;
     }
 }
