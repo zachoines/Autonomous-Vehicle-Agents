@@ -12,6 +12,13 @@ using Unity.MLAgents.Policies;
     in quadrate of encoders. Distance traveled is inferred by wheel Diameter.
 */
 
+public enum DiscreteActionClasses {
+    DEACCELERATE = 1,
+    CONSTANT = 2,
+    ACCELERATE = 3,
+    STOP = 4
+}
+
 public enum Q {
     I,
     II,
@@ -117,6 +124,9 @@ public class MecanumDriveController : Agent
         playerController.Robot.Switch.Enable();
         max_rads_per_second = (settings.rpm / 60.0f) * (2f * (Mathf.PI));
         max_degs_per_second = settings.rpm * 6f;
+
+        // Randomize 
+        transform.rotation = Quaternion.Euler(-90, 0, Random.Range(0.0f, 360.0f));
     }
    
     public override void OnEpisodeBegin()
@@ -130,6 +140,11 @@ public class MecanumDriveController : Agent
         previousActions = currentActions;
     }
 
+    private void FixedUpdate() {
+        previousState = currentState;
+        currentState = GetState();
+        TransitionDependantRewards(previousState, currentState, previousActions, currentActions);   
+    }
     private void TransitionDependantRewards(State PreviousState, State CurrentState, Actions PreviousActions, Actions CurrentActions) {
         
         // Punish each step
@@ -154,11 +169,11 @@ public class MecanumDriveController : Agent
         float lookAtTargetReward = Vector3.Dot(targetTransform.forward, transform.up); // (   + 1f) * .5F; // for 0 to 1
         AddReward(lookAtTargetReward);
 
-        // Punish if agent's forward movement deviates to much relative to previous action (by 90 in any direction)
-        Vector3 lastDirection = Quaternion.Inverse(PreviousState.localRotation) * PreviousState.linearVelocity;
-        Vector3 currentDirection = Quaternion.Inverse(CurrentState.localRotation) * CurrentState.linearVelocity;
 
         if (!settings.useDiscreteActions) {
+            // Punish if agent's forward movement deviates to much relative to previous action (by 90 in any direction)
+            Vector3 lastDirection = Quaternion.Inverse(PreviousState.localRotation) * PreviousState.linearVelocity;
+            Vector3 currentDirection = Quaternion.Inverse(CurrentState.localRotation) * CurrentState.linearVelocity;
             float relativeDirectionAngle;
             if (
                 NearestNth(currentActions.LinearDirection.magnitude, 2) == 0f || 
@@ -187,10 +202,26 @@ public class MecanumDriveController : Agent
     }
 
     public override void CollectObservations(VectorSensor sensor) 
-    {
-        previousState = currentState;
-        currentState = GetState();
-        TransitionDependantRewards(previousState, currentState, previousActions, currentActions);   
+    {        
+        State state = GetState();
+
+        // Current agent velocities
+        sensor.AddObservation(Mathf.Clamp(state.linearVelocity.x, -1f, 1f));
+        sensor.AddObservation(Mathf.Clamp(state.linearVelocity.y, -1f, 1f));
+        sensor.AddObservation(Mathf.Clamp(state.angularVelocity.z, -1f, 1f));
+
+        // Relative angle to goal
+        float angleToGoal = Vector3.Angle(targetTransform.forward, state.upVector);
+        sensor.AddObservation(Mathf.Clamp(angleToGoal / 180f, 0f, 1f));
+
+        // Calculate distance to goal
+        float distanceToGoal = NearestNth(Vector3.Distance(state.localPosition, targetTransform.localPosition), 3);
+        sensor.AddObservation(Mathf.Clamp(distanceToGoal / settings.maxMeasurableDistanceToGoal, 0f, 1f));
+        
+        // Add the last actions taken by the agent
+        foreach (float action in previousActions.rawComponents) {
+            sensor.AddObservation(action);
+        }
 
         // Current lidar readings
         List<Packet> packets = lidar.UpdateSensor(false, true, 20, 360.0f);
@@ -198,46 +229,29 @@ public class MecanumDriveController : Agent
             sensor.AddObservation(packet.distance);
             sensor.AddObservation(packet.theta);
         }
-
-        // Current agent velocity
-        sensor.AddObservation(currentState.linearVelocity.x);
-        sensor.AddObservation(currentState.linearVelocity.y);
-        sensor.AddObservation(currentState.angularVelocity.z);
-
-        // Current angle to goal
-        float angleToGoal = Vector3.SignedAngle( currentState.localPosition - targetTransform.localPosition, transform.forward, Vector3.up) / 180f;
-        sensor.AddObservation(angleToGoal);
-
-        // Calculate distance to goal
-        float distanceToGoal = NearestNth(Vector3.Distance(currentState.localPosition, targetTransform.localPosition), 1);
-        sensor.AddObservation(distanceToGoal);
-
-        // Add the last actions taken by the agent
-        foreach (float action in previousActions.rawComponents) {
-            sensor.AddObservation(action);
-        }
     }
 
     private float ToMovement(int x) {
         switch (x) {
-            case 1:
-                return -1f; // Reverse
-            case 2:
-                return 0f; // No change
-            case 3:
-                return 1f; // Forward
-            case 4:
-                return 0f; // Complete stop
+            case (int)DiscreteActionClasses.DEACCELERATE:
+                return -1f;
+            case (int)DiscreteActionClasses.CONSTANT:
+                return 0f;
+            case (int)DiscreteActionClasses.ACCELERATE:
+                return 1f; 
+            case (int)DiscreteActionClasses.STOP:
+                return 0f;
             default:
                 return 0f;
         }
     }
     public override void OnActionReceived(ActionBuffers actions)
     {
-         Actions newAction = new Actions();
+         Actions newActions = new Actions();
+         Actions lastActions = currentActions;
 
         if (settings.useDiscreteActions) {
-            newAction.rawComponents = new List<float>();
+            newActions.rawComponents = new List<float>();
 
             // Either accelerate, de-accelerate, same velocity, or full stop
             float xLinear = ToMovement(actions.DiscreteActions[0]);
@@ -245,79 +259,72 @@ public class MecanumDriveController : Agent
             float zRotation = ToMovement(actions.DiscreteActions[2]);
 
             // For complete stop
-            // if (actions.DiscreteActions[0] == 4) {
-            //     currentActions.LinearDirection.x = 0f;
-            // }
+            if (actions.DiscreteActions[0] == (int)DiscreteActionClasses.STOP) { lastActions.LinearDirection.x = 0f; }
+            if (actions.DiscreteActions[1] == (int)DiscreteActionClasses.STOP) { lastActions.LinearDirection.y = 0f; }
+            if (actions.DiscreteActions[2] == (int)DiscreteActionClasses.STOP) { lastActions.AngularDirection.x = 0f; }
 
-            // if (actions.DiscreteActions[1] == 4) {
-            //     currentActions.LinearDirection.y = 0f;
-            // }
-
-            // if (actions.DiscreteActions[2] == 4) {
-            //     currentActions.AngularDirection.x = 0f;
-            // }
-
-            // Create new movement from previous and current
+            /* Linear drive with increasing acceleration */
             // newAction.LinearDirection = Vector3.ClampMagnitude((
             //     - new Vector2() {
-            //         x = (xLinear * settings.speedIncrement),
-            //         y = (yLinear * settings.speedIncrement)} 
-            //     + currentActions.LinearDirection) 
+            //         x = (xLinear * settings.velocityIncrement),
+            //         y = (yLinear * settings.velocityIncrement)} 
+            //     + lastActions.LinearDirection) 
             //     * new Vector2() {
-            //         x = Mathf.Max(Mathf.Abs(xLinear * settings.velocityRampFactor), 1f),
-            //         y = Mathf.Max(Mathf.Abs(yLinear * settings.velocityRampFactor), 1f)}
+            //         x = Mathf.Max(Mathf.Abs(xLinear * settings.accelerationMultiplier), 1f),
+            //         y = Mathf.Max(Mathf.Abs(yLinear * settings.accelerationMultiplier), 1f)}
             // , 1.0f);
 
-            newAction.LinearDirection = Vector3.ClampMagnitude((
+            /* Linear drive with constant acceleration */
+            newActions.LinearDirection = Vector3.ClampMagnitude((
                 - new Vector2() {
-                    x = (xLinear * settings.speedIncrement),
-                    y = (yLinear * settings.speedIncrement)} 
-                + currentActions.LinearDirection), 1.0f);
+                    x = (xLinear * settings.velocityIncrement),
+                    y = (yLinear * settings.velocityIncrement)} 
+                + lastActions.LinearDirection), 1.0f);
 
+            /* Angular drive with constant acceleration */
+            newActions.AngularDirection = Vector3.ClampMagnitude((
+                - new Vector2() {
+                    x = (zRotation * settings.velocityIncrement),
+                    y = 0f}
+                + lastActions.AngularDirection), 1.0f);
 
-            // newAction.AngularDirection = Vector2.zero - new Vector2() {
-            //     x = Mathf.Clamp(currentActions.AngularDirection.x + (zRotation * settings.velocityRampFactor), -1f, 1f),
-            //     y = 0f
-            // };
-
-            newAction.rawComponents = new List<float>();
-            newAction.rawComponents.Add(xLinear);
-            newAction.rawComponents.Add(yLinear);
-            newAction.rawComponents.Add(zRotation);
-
+            newActions.rawComponents = new List<float>();
+            newActions.rawComponents.Add(xLinear);
+            newActions.rawComponents.Add(yLinear);
+            newActions.rawComponents.Add(zRotation);
     
-            // GetAngularDrives( newAction.AngularDirection ) + 
-            MecanumDrives fullDrives = GetLinearDrives( newAction.LinearDirection );
+            MecanumDrives fullDrives = GetAngularDrives( newActions.AngularDirection ) + GetLinearDrives( newActions.LinearDirection );
             setWheel(TR, -fullDrives.TR);
             setWheel(BL, fullDrives.BL);
             setWheel(TL, -fullDrives.TL);
             setWheel(BR, fullDrives.BR);
         } else {
-            newAction.rawComponents = new List<float>();
+            newActions.rawComponents = new List<float>();
             for (int i = 0; i < 4; i++) {
                 float action = actions.ContinuousActions[i];
-                newAction.rawComponents.Add(action);
+                newActions.rawComponents.Add(action);
             }
 
-            newAction.LinearDirection = Vector2.zero - new Vector2() {
+            newActions.LinearDirection = Vector2.zero - new Vector2() {
                 x = actions.ContinuousActions[2],
                 y = actions.ContinuousActions[3]
             }; 
 
-            newAction.AngularDirection = Vector2.zero - new Vector2() {
+            newActions.AngularDirection = Vector2.zero - new Vector2() {
                 x = actions.ContinuousActions[0],
                 y = actions.ContinuousActions[1],
             };
             
-            MecanumDrives fullDrives = GetAngularDrives( newAction.AngularDirection ) + GetLinearDrives( newAction.LinearDirection );
+            MecanumDrives fullDrives = GetAngularDrives( newActions.AngularDirection ) + GetLinearDrives( newActions.LinearDirection );
             setWheel(TR, -fullDrives.TR);
             setWheel(BL, fullDrives.BL);
             setWheel(TL, -fullDrives.TL);
             setWheel(BR, fullDrives.BR);
         }
        
+        // Save for later
         previousActions = currentActions;
-        currentActions = newAction;
+        currentActions = newActions;
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
@@ -326,75 +333,70 @@ public class MecanumDriveController : Agent
             ActionSegment<int> discreteActions = actionsOut.DiscreteActions;
             Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
             Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
-            float cruzControl = playerController.Robot.Switch.ReadValue<float>();
+            bool cruzControl = playerController.Robot.Switch.ReadValue<float>() > 0f;
+            
 
+            // Controls 'x' component of linear drive
             if (NearestNth(r.x, 1) == 0f) {
-                if (cruzControl > 0f) {
-                    discreteActions[0] = 2;
+                if (cruzControl) {
+                    discreteActions[0] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[0] = 4;
+                    discreteActions[0] = (int)DiscreteActionClasses.STOP;
                 }
             } else if (NearestNth(r.x, 1) > 0f) {
-                if (cruzControl > 0f) {
-                    discreteActions[0] = 2;
+                if (cruzControl) {
+                    discreteActions[0] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[0] = 1;
+                    discreteActions[0] = (int)DiscreteActionClasses.DEACCELERATE;
                 }
             } else {
-                if (cruzControl > 0f) {
-                    discreteActions[0] = 2;
+                if (cruzControl) {
+                    discreteActions[0] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[0] = 3;
+                    discreteActions[0] = (int)DiscreteActionClasses.ACCELERATE;
                 }
             }
 
+            // Controls 'y' component of linear drive
             if (NearestNth(r.y, 1) == 0f) {
-                if (cruzControl > 0f) {
-                    discreteActions[1] = 2;
+                if (cruzControl) {
+                    discreteActions[1] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[1] = 4;
+                    discreteActions[1] = (int)DiscreteActionClasses.STOP;
                 }
             } else if (NearestNth(r.y, 1) > 0f) {
-                if (cruzControl > 0f) {
-                    discreteActions[1] = 2;
+                if (cruzControl) {
+                    discreteActions[1] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[1] = 1;
+                    discreteActions[1] = (int)DiscreteActionClasses.DEACCELERATE;
                 }
             } else {
-                if (cruzControl > 0f) {
-                    discreteActions[1] = 2;
+                if (cruzControl) {
+                    discreteActions[1] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
-                    discreteActions[1] = 3;
+                    discreteActions[1] = (int)DiscreteActionClasses.ACCELERATE;
                 }
             }
 
-
-            // if (NearestNth(l.x, 1) == 0f) {
-            //     if (cruzControl > 0f) {
-            //         discreteActions[0] = 2;
-            //     } else {
-            //         discreteActions[0] = 4;
-            //     }
-            // } else if (NearestNth(r.x, 1) > 0f) {
-            //     if (cruzControl > 0f) {
-            //         discreteActions[0] = 2;
-            //     } else {
-            //         discreteActions[0] = 1;
-            //     }
-            // } else {
-            //     if (cruzControl > 0f) {
-            //         discreteActions[0] = 2;
-            //     } else {
-            //         discreteActions[0] = 3;
-            //     }
-            // }
-
+            // Control 'z' component of angular drive
             if (NearestNth(l.x, 1) == 0f) {
-                discreteActions[2] = 2;
+                if (cruzControl) {
+                    discreteActions[2] = (int)DiscreteActionClasses.CONSTANT;
+                } else {
+                    discreteActions[2] = (int)DiscreteActionClasses.STOP;
+                }
             } else if (NearestNth(l.x, 1) > 0f) {
-                discreteActions[2] = 1;
+                if (cruzControl) {
+                    discreteActions[2] = (int)DiscreteActionClasses.CONSTANT;
+                } else {
+                    discreteActions[2] = (int)DiscreteActionClasses.DEACCELERATE;
+                }
             } else {
-                discreteActions[2] = 3;
+                if (cruzControl) {
+                    discreteActions[2] = (int)DiscreteActionClasses.CONSTANT;
+                } else {
+                    discreteActions[2] = (int)DiscreteActionClasses.ACCELERATE;
+                }
             }
 
         } else {
@@ -407,7 +409,6 @@ public class MecanumDriveController : Agent
             continousActions[2] = r.x;
             continousActions[3] = r.y;
         }
-        
     }
 
     private void OnTriggerEnter(Collider other) {
@@ -494,14 +495,6 @@ public class MecanumDriveController : Agent
         angles.z = to360(angles.z);
         return angles;
     }
-    // private Vector3 angularAmount(LineVector rotation) {
-    //     float speed = (rotation.M );
-    //     Vector3 direction = rotation.X > 0 ? originalRight : -originalRight;
-    //     Quaternion qTo = Quaternion.LookRotation(Vector3.right);
-    //     Quaternion qFrom = Quaternion.LookRotation(Vector3.forward);
-    //     Vector3 angle = Quaternion.RotateTowards(qFrom, qTo, speed * max_degs_per_second * Time.fixedDeltaTime).eulerAngles;
-    //     return clipAngles(angle);
-    // }
 
     MecanumDrives GetAngularDrives(Vector3 rotation) {
         MecanumDrives drives;

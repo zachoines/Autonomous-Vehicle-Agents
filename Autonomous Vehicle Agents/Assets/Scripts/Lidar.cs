@@ -134,6 +134,11 @@ public class Lidar : MonoBehaviour {
     [Range(1, 1000)]
     [Tooltip("Length of the rays to cast.")]
     float _LaserLength = 20f;
+    public float LaserLength
+    {
+        get => _LaserLength;
+        set { _LaserLength = value; }
+    }
 
 
     [SerializeField, FormerlySerializedAs("detectableTags")]
@@ -238,7 +243,6 @@ public class Lidar : MonoBehaviour {
     /// <returns></returns>
     public LaserOutput Perceive( LaserInput input )
     {
-        float unscaledLaserLength = input.LaserLength;
         (Vector3 StartPositionWorld, Vector3 EndPositionWorld) = LaserExtents(input);
         Vector3 startPositionWorld = StartPositionWorld;
         Vector3 endPositionWorld = EndPositionWorld;

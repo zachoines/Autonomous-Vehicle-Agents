@@ -23,9 +23,12 @@ public class MecanumDriveAgentSettings : MonoBehaviour
     public bool useDiscreteActions = true;
 
     // When using discrete actions, use this velocity ramping factor
-    public float velocityRampFactor = 1.25f;
+    public float accelerationMultiplier = 1.128f;
 
-    public float speedIncrement = 0.01f;
+    public float velocityIncrement = 0.01f;
+
+    // In meters. Used to scale our distance detections from 0 to 1.
+    public float maxMeasurableDistanceToGoal = 15f;
 
     // Frame size Millimeters
     Vector3 frameSize = new Vector3() {
