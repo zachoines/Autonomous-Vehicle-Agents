@@ -24,17 +24,6 @@ public struct LaserInput
     /// Filtering options for the casts.
     /// </summary>
     public int LayerMask;
-
-    /// <summary>
-    /// Returns the expected number of floats in the output.
-    /// </summary>
-    /// <returns></returns>
-
-    
-    public int OutputSize()
-    {
-        return ((DetectableTags?.Count ?? 0) + 2);
-    }
 }
 
 public struct LaserOutput
@@ -103,23 +92,6 @@ public struct LaserOutput
             return rayDirection.magnitude;
         }
     }
-
-    /// <param name="numDetectableTags"></param>
-    /// <param name="rayIndex"></param>
-    /// <param name="buffer">Output buffer. The size must be equal to (numDetectableTags+2) * RayOutputs.Length</param>
-    public void ToFloatArray(int numDetectableTags, float[] buffer)
-    {
-        for (int i = 0; i < numDetectableTags; i++) {   
-            buffer[i] = 0.0f;
-        }
-        if (HitTaggedObject)
-        {
-            buffer[HitClass] = 1f;
-        }
-        buffer[numDetectableTags] = HasHit ? 0f : 1f;
-        buffer[numDetectableTags + 1] = distance;
-    }
-    
 }
 
 
@@ -203,17 +175,21 @@ public class Lidar : MonoBehaviour {
     private bool running = false;
     
 
-    public List<Packet> UpdateSensor(bool debug = false, int numSamples = 360, float degrees = 360.0f) {
+    public List<Packet> UpdateSensor(bool debug = false, bool normalize = true, int numSamples = 360, float degrees = 360.0f) {
         List<Packet> packets = new List<Packet>();
         List<LaserInput> inputs = GenerateInputScanData(numSamples, degrees);
         List<LaserOutput> scanResults = FullScan(inputs);
-
+        int count = 0;
         foreach (LaserOutput scan in scanResults) {
+            if (count > numSamples - 1) {
+                return packets;
+            }
             Packet packet = new Packet() {
-                theta = getPlanarRotation(scan.theta),
-                distance = scan.distance
+                theta = normalize ? getPlanarRotation(scan.theta) / 360f : getPlanarRotation(scan.theta),
+                distance = normalize ? scan.distance : scan.distance * _LaserLength
             };
             packets.Add(packet); 
+            count++;
         }
 
         if (debug) {

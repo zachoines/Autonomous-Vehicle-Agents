@@ -65,6 +65,7 @@
      <Compile Include="Assets\Scripts\MoveToGoalAgent.cs" />
      <Compile Include="Assets\Scripts\Goal.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Match3\Scripts\Match3TileSelector.cs" />
+     <Compile Include="Assets\Scripts\MecanumDriveAgentSettings.cs" />
      <Compile Include="Assets\ML-Agents\Examples\DungeonEscape\Scripts\PushAgentEscape.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Match3\Scripts\Match3Board.cs" />
      <Compile Include="Assets\ML-Agents\Examples\FoodCollector\Scripts\FoodCollectorAgent.cs" />
