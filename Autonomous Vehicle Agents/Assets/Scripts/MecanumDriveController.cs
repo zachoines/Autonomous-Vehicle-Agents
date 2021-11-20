@@ -83,6 +83,8 @@ public class MecanumDriveController : Agent
 
     BehaviorParameters behaviorParameters;
 
+    EnvController envController;
+
     // The target to reach
     [SerializeField] 
     private Transform targetTransform;
@@ -112,11 +114,14 @@ public class MecanumDriveController : Agent
     private State previousState;
     private State currentState;
 
+    private Vector3 robotStartingPosition;
+
     private void Awake() {
         // Vector3 objectSize = Vector3.Scale(transform.localScale, GetComponent<MeshFilter>().mesh.bounds.size);
         settings = FindObjectOfType<MecanumDriveAgentSettings>();    
         decisionRequester = FindObjectOfType<DecisionRequester>();
         behaviorParameters = FindObjectOfType<BehaviorParameters>();
+        envController = FindObjectOfType<EnvController>();
         playerController = new PlayerControls();
         playerController.Robot.Enable();    
         playerController.Robot.Right.Enable();
@@ -124,9 +129,7 @@ public class MecanumDriveController : Agent
         playerController.Robot.Switch.Enable();
         max_rads_per_second = (settings.rpm / 60.0f) * (2f * (Mathf.PI));
         max_degs_per_second = settings.rpm * 6f;
-
-        // Randomize 
-        transform.rotation = Quaternion.Euler(-90, 0, Random.Range(0.0f, 360.0f));
+        robotStartingPosition = transform.position;        
     }
    
     public override void OnEpisodeBegin()
@@ -137,7 +140,23 @@ public class MecanumDriveController : Agent
         currentActions.rawComponents = new List<float>(actions);
         currentActions.LinearDirection = Vector3.zero;
         currentActions.AngularDirection = Vector3.zero;
-        previousActions = currentActions;
+        previousActions = currentActions;        
+    }
+
+    private void ResetRobot() {
+        Quaternion newRotation = Quaternion.Euler(-90, 0, Random.Range(0.0f, 360.0f));
+        Vector3 newPosition = envController.GenerateNewSpawn();
+        ArticulationBody frame = gameObject.GetComponent<ArticulationBody>();
+
+        TL.velocity = Vector3.zero;
+        TR.velocity = Vector3.zero;
+        BL.velocity = Vector3.zero;
+        BR.velocity = Vector3.zero;
+        frame.velocity = Vector3.zero;
+        
+        newPosition.y = transform.position.y;
+        targetTransform.position = newPosition;
+        frame.TeleportRoot(newPosition, newRotation);
     }
 
     private void FixedUpdate() {
@@ -206,9 +225,9 @@ public class MecanumDriveController : Agent
         State state = GetState();
 
         // Current agent velocities
-        sensor.AddObservation(Mathf.Clamp(state.linearVelocity.x, -1f, 1f));
-        sensor.AddObservation(Mathf.Clamp(state.linearVelocity.y, -1f, 1f));
-        sensor.AddObservation(Mathf.Clamp(state.angularVelocity.z, -1f, 1f));
+        sensor.AddObservation(map(Mathf.Clamp(state.linearVelocity.x, -1f, 1f), -1f, 1f, 0f, 1f));
+        sensor.AddObservation(map(Mathf.Clamp(state.linearVelocity.y, -1f, 1f), -1f, 1f, 0f, 1f));
+        sensor.AddObservation(map(Mathf.Clamp(state.angularVelocity.z, -1f, 1f), -1f, 1f, 0f, 1f));
 
         // Relative angle to goal
         float angleToGoal = Vector3.Angle(targetTransform.forward, state.upVector);
@@ -415,11 +434,17 @@ public class MecanumDriveController : Agent
         if (other.TryGetComponent<Goal>(out Goal goal)) {
             AddReward(settings.goalReward);
             EndEpisode();
-        }
-
-        if (other.TryGetComponent<Wall>(out Wall wall)) {
+            ResetRobot();
+            Vector3 pos = envController.GenerateNewSpawn();
+            pos.y = targetTransform.position.y;
+            targetTransform.position = pos;
+        } else if (other.TryGetComponent<Wall>(out Wall wall)) {
             AddReward(settings.collisionReward);
             EndEpisode();
+            ResetRobot();
+            Vector3 pos = envController.GenerateNewSpawn();
+            pos.y = targetTransform.position.y;
+            targetTransform.position = pos;
         }
     }
 
@@ -579,5 +604,10 @@ public class MecanumDriveController : Agent
     {
         float scalar = Mathf.Pow(10f, place);
         return (float)((int)(n * scalar)) / scalar;
+    }
+
+    private float map(float value, float fromLow, float fromHigh, float toLow, float toHigh) 
+    {
+        return (value - fromLow) * (toHigh - toLow) / (fromHigh - fromLow) + toLow;
     }
 }
