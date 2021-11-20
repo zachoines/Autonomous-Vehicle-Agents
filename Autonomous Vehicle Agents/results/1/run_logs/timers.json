@@ -1,0 +1,42 @@
+{
+    "name": "root",
+    "metadata": {
+        "timer_format_version": "0.1.0",
+        "start_time_seconds": "1637419308",
+        "python_version": "3.8.10 (default, May 19 2021, 13:12:57) [MSC v.1916 64 bit (AMD64)]",
+        "command_line_arguments": "C:\\Users\\zacho\\.conda\\envs\\MLAgents\\Scripts\\mlagents-learn --force config/mecanumAgent.yml --run-id=1",
+        "mlagents_version": "0.27.0",
+        "mlagents_envs_version": "0.27.0",
+        "communication_protocol_version": "1.5.0",
+        "pytorch_version": "1.7.1+cu110",
+        "numpy_version": "1.21.0",
+        "end_time_seconds": "1637419322"
+    },
+    "total": 14.9054379,
+    "count": 1,
+    "self": 0.08255939999999917,
+    "children": {
+        "run_training.setup": {
+            "total": 3.0603355,
+            "count": 1,
+            "self": 3.0603355
+        },
+        "TrainerController.start_learning": {
+            "total": 11.762543,
+            "count": 1,
+            "self": 9.190000000103282e-05,
+            "children": {
+                "TrainerController._reset_env": {
+                    "total": 11.7624332,
+                    "count": 1,
+                    "self": 11.7624332
+                },
+                "TrainerController._save_models": {
+                    "total": 1.7899999999571037e-05,
+                    "count": 1,
+                    "self": 1.7899999999571037e-05
+                }
+            }
+        }
+    }
+}

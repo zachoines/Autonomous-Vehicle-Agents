@@ -45,6 +45,7 @@
      <Compile Include="Assets\Scripts\Lidar.cs" />
      <Compile Include="Assets\ML-Agents\TestScenes\TestCompressedTexture\TestTextureSensor.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Basic\Scripts\BasicController.cs" />
+     <Compile Include="Assets\Scripts\EnvController.cs" />
      <Compile Include="Assets\Scripts\Wall.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Startup\Scripts\Startup.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\CollisionCallbacks.cs" />
@@ -104,7 +105,6 @@
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\ModelOverrider.cs" />
      <Compile Include="Assets\ML-Agents\Examples\SharedAssets\Scripts\AdjustTrainingTimescale.cs" />
      <Compile Include="Assets\ML-Agents\Examples\Soccer\Scripts\SoccerSettings.cs" />
-     <Compile Include="Assets\Scripts\EnvController.cs" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\GridPatternShader.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderOutline.shader" />
      <None Include="Assets\ML-Agents\Examples\SharedAssets\Materials\ShaderRadialGrid.shader" />
