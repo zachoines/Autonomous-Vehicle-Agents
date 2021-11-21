@@ -156,7 +156,7 @@ public class MecanumDriveController : Agent
         
         newPosition.y = transform.position.y;
         targetTransform.position = newPosition;
-        frame.TeleportRoot(newPosition, newRotation);
+        frame.TeleportRoot(newPosition, transform.rotation);
     }
 
     private void FixedUpdate() {
@@ -182,12 +182,13 @@ public class MecanumDriveController : Agent
         // assuming we are not just spinning in circles
         if (NearestNth(CurrentState.linearVelocity.magnitude * 1000f, 1) > 0f) {
             float deltaDistanceReward = Mathf.Clamp(deltaDistance / maxTravel, -1f, 1f);
-            totalReward += deltaDistanceReward;
             Debug.Log(deltaDistanceReward);
+            totalReward += deltaDistanceReward;
         } 
 
         // Reward if agent is facing goal
-        float lookAtTargetReward = Vector3.Dot(targetTransform.forward, CurrentState.upVector); // (   + 1f) * .5F; // for 0 to 1
+        Vector3 toPosition = Vector3.Normalize(targetTransform.position - transform.position);
+        float lookAtTargetReward = Vector3.Dot(transform.right, toPosition); // (   + 1f) * .5F; // for 0 to 1
         totalReward += lookAtTargetReward;
 
         return totalReward;
@@ -235,8 +236,9 @@ public class MecanumDriveController : Agent
         sensor.AddObservation(map(Mathf.Clamp(state.angularVelocity.z, -1f, 1f), -1f, 1f, 0f, 1f));
 
         // Relative angle to goal
-        float angleToGoal = Vector3.Angle(targetTransform.forward, state.upVector);
-        sensor.AddObservation(Mathf.Clamp(angleToGoal / 180f, 0f, 1f));
+        Vector3 toPosition = Vector3.Normalize(targetTransform.position - transform.position);
+        float angleToPosition = Vector3.Angle(transform.right, toPosition);
+        sensor.AddObservation(Mathf.Clamp(angleToPosition / 180f, 0f, 1f));
 
         // Calculate distance to goal
         float distanceToGoal = state.distanceToGoal;
@@ -299,15 +301,15 @@ public class MecanumDriveController : Agent
             // , 1.0f);
 
             /* Linear drive with constant acceleration */
-            newActions.LinearDirection = Vector3.ClampMagnitude((
-                - new Vector2() {
+            newActions.LinearDirection = Vector2.ClampMagnitude((
+                new Vector2() {
                     x = (xLinear * settings.velocityIncrement),
                     y = (yLinear * settings.velocityIncrement)} 
                 + lastActions.LinearDirection), 1.0f);
 
             /* Angular drive with constant acceleration */
-            newActions.AngularDirection = Vector3.ClampMagnitude((
-                - new Vector2() {
+            newActions.AngularDirection = Vector2.ClampMagnitude((
+                new Vector2() {
                     x = (zRotation * settings.velocityIncrement),
                     y = 0f}
                 + lastActions.AngularDirection), 1.0f);
@@ -317,7 +319,7 @@ public class MecanumDriveController : Agent
             setWheel(BL, fullDrives.BL);
             setWheel(TL, -fullDrives.TL);
             setWheel(BR, fullDrives.BR);
-
+ 
             newActions.rawComponents = new List<float>();
             newActions.rawComponents.Add(-fullDrives.TR);
             newActions.rawComponents.Add(fullDrives.BL);
@@ -331,12 +333,12 @@ public class MecanumDriveController : Agent
                 newActions.rawComponents.Add(action);
             }
 
-            newActions.LinearDirection = Vector2.zero - new Vector2() {
+            newActions.LinearDirection = new Vector2() {
                 x = actions.ContinuousActions[2],
                 y = actions.ContinuousActions[3]
             }; 
 
-            newActions.AngularDirection = Vector2.zero - new Vector2() {
+            newActions.AngularDirection = new Vector2() {
                 x = actions.ContinuousActions[0],
                 y = actions.ContinuousActions[1],
             };
@@ -355,12 +357,17 @@ public class MecanumDriveController : Agent
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
+        Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
+        Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
+
+        // Vector2 r = new Vector2() {
+        //     x = 0,
+        //     y = 1f
+        // };
+
         if (settings.useDiscreteActions) {
             ActionSegment<int> discreteActions = actionsOut.DiscreteActions;
-            Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
-            Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
             bool cruzControl = playerController.Robot.Switch.ReadValue<float>() > 0f;
-            
 
             // Controls 'x' component of linear drive
             if (NearestNth(r.x, 1) == 0f) {
@@ -369,7 +376,7 @@ public class MecanumDriveController : Agent
                 } else {
                     discreteActions[0] = (int)DiscreteActionClasses.STOP;
                 }
-            } else if (NearestNth(r.x, 1) > 0f) {
+            } else if (r.x < 0f) {
                 if (cruzControl) {
                     discreteActions[0] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
@@ -390,7 +397,7 @@ public class MecanumDriveController : Agent
                 } else {
                     discreteActions[1] = (int)DiscreteActionClasses.STOP;
                 }
-            } else if (NearestNth(r.y, 1) > 0f) {
+            } else if (r.y < 0f) {
                 if (cruzControl) {
                     discreteActions[1] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
@@ -411,7 +418,7 @@ public class MecanumDriveController : Agent
                 } else {
                     discreteActions[2] = (int)DiscreteActionClasses.STOP;
                 }
-            } else if (NearestNth(l.x, 1) > 0f) {
+            } else if (l.x < 0f) {
                 if (cruzControl) {
                     discreteActions[2] = (int)DiscreteActionClasses.CONSTANT;
                 } else {
@@ -427,9 +434,6 @@ public class MecanumDriveController : Agent
 
         } else {
             ActionSegment<float> continousActions = actionsOut.ContinuousActions;
-            Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
-            Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
-
             continousActions[0] = l.x;
             continousActions[1] = l.y;
             continousActions[2] = r.x;
@@ -464,15 +468,11 @@ public class MecanumDriveController : Agent
 
     private void setDrive(float rotationGoal, float currentRotation,  float targetVelocity, float forceLimit, ArticulationBody articulation)
     {
-        if (rotationGoal == currentRotation) {
-            return; 
-        }
-
         ArticulationDrive drive = articulation.xDrive;
         drive.target = rotationGoal;
         drive.forceLimit = forceLimit;
-        drive.stiffness = 10000;
-        drive.damping = 100;
+        drive.stiffness = 1000;
+        drive.damping = 0;
         drive.targetVelocity = targetVelocity;
         articulation.xDrive = drive;
     }
@@ -480,10 +480,12 @@ public class MecanumDriveController : Agent
     private void setVelocity(float targetVelocity, float forceLimit, ArticulationBody articulation) 
     {
         ArticulationDrive drive = articulation.xDrive;
+        // articulation.maxAngularVelocity = 1f;
+        articulation.solverVelocityIterations = 20;
         drive.targetVelocity = targetVelocity; 
-        drive.forceLimit = forceLimit; 
+        drive.forceLimit = forceLimit;
         drive.stiffness = 0f;
-        drive.damping = 10000;
+        drive.damping = 1000f;
         articulation.xDrive = drive;
     }
 
@@ -492,7 +494,7 @@ public class MecanumDriveController : Agent
         float interval = decisionRequester.DecisionPeriod * Time.fixedDeltaTime;
         float deltaDegrees = (speed * max_degs_per_second) * interval;
         float angularVelocity = (speed * max_rads_per_second) / Time.fixedDeltaTime;
-        float forceLimit = settings.torque; // TODO: settings.torque / Time.deltaTime (right now it makes the robot FLIP around)
+        float forceLimit = settings.torque / Time.fixedDeltaTime;
 
         if (settings.useVelocity) {
             setVelocity(angularVelocity, forceLimit, wheel);
@@ -609,6 +611,10 @@ public class MecanumDriveController : Agent
 
     private float NearestNth(float n, int place) 
     {
+        if (place <= 0) {
+            return Mathf.Floor(n);
+        }
+        
         float scalar = Mathf.Pow(10f, place);
         return (float)((int)(n * scalar)) / scalar;
     }
@@ -617,4 +623,26 @@ public class MecanumDriveController : Agent
     {
         return (value - fromLow) * (toHigh - toLow) / (fromHigh - fromLow) + toLow;
     }
+
+    // public struct LineVector 
+    // {
+    //     private Vector2 p;
+    //     private Vector2 q;
+
+    //     public float X; // X component
+    //     public float Y; // Y component
+    //     public float M; // Magnitude
+    //     public float A; // Angle of unit circle 
+
+    //     public LineVector(Vector2 p1, Vector2 p2) {
+    //         p = p1;
+    //         q = p2;
+    //         X = q.x - p.x;
+    //         Y = q.y - p.y;
+    //         M = Mathf.Sqrt(Mathf.Pow(X, 2) + Mathf.Pow(Y, 2));
+    //         A = Mathf.Atan2(Y, X);
+    //         A *= 180f / Mathf.PI; // To degrees -180 <-> 180
+    //         A = A < 0f ? A + 360f : A;  // To 0 <-> 360
+    //     }
+    // };
 }

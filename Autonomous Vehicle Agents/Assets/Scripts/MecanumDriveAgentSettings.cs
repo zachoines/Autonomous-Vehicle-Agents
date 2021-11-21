@@ -8,7 +8,8 @@ public class MecanumDriveAgentSettings : MonoBehaviour
     public float stepReward=-0.005f;
 
     // Motor Rotations/Minute
-    public float rpm = 310.0f;
+    // public float rpm = 310.0f;
+    public float rpm = 150.0f;
 
     // Wheel Diameters Millimeters    
     public float wheelDiameter = 96.0f;
