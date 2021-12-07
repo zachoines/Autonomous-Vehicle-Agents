@@ -1,4 +1,62 @@
 {
+    "mecanumAgentDiscrete": {
+        "checkpoints": [
+            {
+                "steps": 2849752,
+                "file_path": "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2849752.onnx",
+                "reward": -1.003282473422587,
+                "creation_time": 1638842719.553663,
+                "auxillary_file_paths": [
+                    "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2849752.pt"
+                ]
+            },
+            {
+                "steps": 2899862,
+                "file_path": "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2899862.onnx",
+                "reward": 4.954884052276611,
+                "creation_time": 1638843153.2637992,
+                "auxillary_file_paths": [
+                    "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2899862.pt"
+                ]
+            },
+            {
+                "steps": 2949763,
+                "file_path": "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2949763.onnx",
+                "reward": 3.963168780639535,
+                "creation_time": 1638843592.263275,
+                "auxillary_file_paths": [
+                    "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2949763.pt"
+                ]
+            },
+            {
+                "steps": 2999954,
+                "file_path": "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2999954.onnx",
+                "reward": 3.215542003294104,
+                "creation_time": 1638844026.1643257,
+                "auxillary_file_paths": [
+                    "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-2999954.pt"
+                ]
+            },
+            {
+                "steps": 3002307,
+                "file_path": "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-3002307.onnx",
+                "reward": 1.29211085755378,
+                "creation_time": 1638844046.1418643,
+                "auxillary_file_paths": [
+                    "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-3002307.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 3002307,
+            "file_path": "results\\1\\mecanumAgentDiscrete.onnx",
+            "reward": 1.29211085755378,
+            "creation_time": 1638844046.1418643,
+            "auxillary_file_paths": [
+                "results\\1\\mecanumAgentDiscrete\\mecanumAgentDiscrete-3002307.pt"
+            ]
+        }
+    },
     "metadata": {
         "stats_format_version": "0.3.0",
         "mlagents_version": "0.27.0",

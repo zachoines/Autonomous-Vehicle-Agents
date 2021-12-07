@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -94,7 +93,6 @@ public struct LaserOutput
     }
 }
 
-
 public struct Packet {
     public float distance;
     public float theta;
@@ -165,20 +163,14 @@ public class Lidar : MonoBehaviour {
     private float rotationSpeed = 45.0f;
 
 
-    [SerializeField, FormerlySerializedAs("rotationDirection")]
+    [SerializeField, FormerlySerializedAs("rotationAxis")]
     [Tooltip("Rotation vector applied to GameObject. Default is Vector3.up")]
-    private Vector3 rotationDirection = Vector3.up;
-
-
-    [SerializeField, FormerlySerializedAs("detectionsPerSecond")]
-    [Tooltip("Number of laser detections per second")]
-    private int numDetections = 1000;
-
+    private Vector3 rotationAxis = Vector3.up;
 
     private LaserOutput lastOutput;
     private Vector3 lastRotation;
     private bool running = false;
-    
+    private Rigidbody rb;
 
     public List<Packet> UpdateSensor(bool debug = false, bool normalize = true, int numSamples = 360, float degrees = 360.0f) {
         List<Packet> packets = new List<Packet>();
@@ -190,7 +182,7 @@ public class Lidar : MonoBehaviour {
                 return packets;
             }
             Packet packet = new Packet() {
-                theta = normalize ? getPlanarRotation(scan.theta) / 360f : getPlanarRotation(scan.theta),
+                theta = normalize ? getRotation(scan.theta) / 360f : getRotation(scan.theta),
                 distance = normalize ? scan.distance : scan.distance * _LaserLength
             };
             packets.Add(packet); 
@@ -201,30 +193,32 @@ public class Lidar : MonoBehaviour {
             DrawOutput(scanResults.Last());
         }
 
-        return packets;
+        return packets.OrderBy((Packet x) => x.theta).ToList<Packet>();
     }
     void Update()
     {        
-        // Rotate the objects transform to new angle location
-        float desiredRotation = Time.deltaTime * rotationSpeed;
-        
-        // Rotation is for introducing non-deterministic angles when calling UpdateSensor(). Also looks cool.
-        transform.Rotate(rotationDirection, desiredRotation, Space.World);
+        // Rotation is for introducing non-deterministic angles when calling UpdateSensor().
+        // float desiredRotation = Time.deltaTime * rotationSpeed;
+        // LaserOrientation += rotationAxis * desiredRotation;
+        // LaserOrientation = clipAngles(LaserOrientation);
 
+        // transform.Rotate(rotationAxis, getRotation(LaserOrientation), Space.Self);
+        // transform.eulerAngles += LaserOrientation;
+        
         // Lock orientation
-        Vector3 currentRotation = transform.eulerAngles;
-        currentRotation.x = currentRotation.x * rotationDirection.x;
-        currentRotation.y = currentRotation.y * rotationDirection.y;
-        currentRotation.z = currentRotation.z * rotationDirection.z;
-        transform.eulerAngles = currentRotation;
-    }
-
-    private void LateUpdate() {
-        
+        // Vector3 currentRotation = transform.localEulerAngles;
+        // currentRotation.x = currentRotation.x * rotationAxis.x;
+        // currentRotation.y = currentRotation.y * rotationAxis.y;
+        // currentRotation.z = currentRotation.z * rotationAxis.z;
+        // transform.localEulerAngles = currentRotation;
     }
 
     private void Start() {
+        rb = GetComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.detectCollisions = false;
         running = true;
+        transform.localEulerAngles = LaserOrientation;
     }
 
     LaserInput GetInput() {
@@ -300,12 +294,11 @@ public class Lidar : MonoBehaviour {
     private List<LaserInput> GenerateInputScanData(int numberOfScans, float range) {
         
         List<LaserInput> inputs = new List<LaserInput>();
-        float currentRotation = getPlanarRotation(transform.localRotation.eulerAngles);
-        
+        float currentRotation = getRotation(LaserOrientation);
         float step = range / (float)(numberOfScans);
         for (float angle = currentRotation; angle <= (currentRotation + range); angle += step) {
             LaserInput input = GetInput();
-            input.LaserOrientation = (rotationDirection * (angle % 360f)) + LaserOrientation;
+            input.LaserOrientation = clipAngles((rotationAxis * angle) + LaserOrientation);
             inputs.Add(input);
         }
 
@@ -329,11 +322,11 @@ public class Lidar : MonoBehaviour {
     // Get the current planar rotation based on rotation direction
     // </summary>
     // <returns>The current orientation along the configured plane of rotation </returns>
-    public float getPlanarRotation(Vector3 rotation) {
+    public float getRotation(Vector3 rotation) {
         float currentPlanarRotation = 0.0f;
-        if (rotationDirection.y > 0.0f) {
+        if (rotationAxis.y > 0.0f) {
             currentPlanarRotation = rotation.y;
-        } else if (rotationDirection.x > 0.0f) {
+        } else if (rotationAxis.x > 0.0f) {
             currentPlanarRotation = rotation.x;
         } else {
             currentPlanarRotation = rotation.z;
@@ -400,13 +393,28 @@ public class Lidar : MonoBehaviour {
     public (Vector3 StartPositionWorld, Vector3 EndPositionWorld) LaserExtents(LaserInput input)
     {
         Vector3 currentGlobalPosition = transform.position;
-        Vector3 globalEndPosition = transform.TransformPoint(Vector3.forward * input.LaserLength);
-        Vector3 endPositionGlobal = RotatePivot(globalEndPosition, Quaternion.Euler(input.LaserOrientation), currentGlobalPosition);
+        Vector3 globalEndPosition = transform.TransformPoint(Vector3.right * input.LaserLength);
+        Quaternion globalRotation = Quaternion.Euler(transform.TransformVector(input.LaserOrientation));
+        Vector3 endPositionGlobal = RotatePivot(globalEndPosition, globalRotation, currentGlobalPosition);
 
         return (
             StartPositionWorld: currentGlobalPosition,
             EndPositionWorld: endPositionGlobal
         );
+    }
+
+     private float to360(float angle) {
+
+        // Constrain to 0 <--> 360
+        angle %= 360f;
+        angle = angle < 0.0 ? angle + 360 : angle;
+        return angle;    
+    }
+    private Vector3 clipAngles(Vector3 angles) {
+        angles.x = to360(angles.x);
+        angles.y = to360(angles.y);
+        angles.z = to360(angles.z);
+        return angles;
     }
 }
 

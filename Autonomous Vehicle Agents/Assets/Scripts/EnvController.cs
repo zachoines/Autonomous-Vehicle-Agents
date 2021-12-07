@@ -23,8 +23,9 @@ public class EnvController : MonoBehaviour {
     
     public Vector3 GenerateNewSpawn()
     {
-        var foundNewSpawnLocation = false;
-        var newSpawnPos = Vector3.zero;
+        bool foundNewSpawnLocation = false;
+        Vector3 newSpawnPos = Vector3.zero;
+
         while (foundNewSpawnLocation == false)
         {
             float randomPosX = Random.Range(-arenaBounds.extents.x * spawnRadius,
@@ -33,7 +34,7 @@ public class EnvController : MonoBehaviour {
             float randomPosZ = Random.Range(-arenaBounds.extents.z * spawnRadius,
                 arenaBounds.extents.z * spawnRadius);
             newSpawnPos = arena.transform.position + new Vector3(randomPosX, 1f, randomPosZ);
-            if (Physics.CheckBox(newSpawnPos, new Vector3(1.5f, 0.01f, 1.5f)) == false)
+            if (Physics.CheckBox(newSpawnPos, new Vector3(.5f, 0.01f, .5f)) == false)
             {
                 foundNewSpawnLocation = true;
             }

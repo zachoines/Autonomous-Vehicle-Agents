@@ -84,8 +84,6 @@ public class MecanumDriveController : Agent
 
     BehaviorParameters behaviorParameters;
 
-    EnvController envController;
-
     // The target to reach
     [SerializeField] 
     private Transform targetTransform;
@@ -99,10 +97,27 @@ public class MecanumDriveController : Agent
     private ArticulationBody BL = null;
     [SerializeField] 
     private ArticulationBody BR = null;
+
+    private List<ArticulationBody> wheels;
+    
+    [SerializeField] 
+    private ArticulationBody frame = null;
     
     // Lidar component here
     [SerializeField]
     private Lidar lidar = null;
+
+    [SerializeField]
+    [Header("Goal Spawn Radias", order = 999)]
+    private float spawnRadius = 1f;
+
+    [SerializeField]
+    [Header("Arena", order = 999)]
+    public GameObject arena;
+
+    [SerializeField]
+    [Header("Arena bounds", order = 999)]
+    public Bounds arenaBounds;
 
     // No-serialized private variables here
     private float max_rads_per_second = 0;
@@ -112,28 +127,66 @@ public class MecanumDriveController : Agent
     private Actions currentActions; 
     private State previousState;
     private State currentState;
-
     private Vector3 robotStartingPosition;
+    private Vector3 goalStartingPosition;
     private float lastDistanceToGoal;
+    Collider m_collider = null;
 
-    private void Awake() {
-        // Vector3 objectSize = Vector3.Scale(transform.localScale, GetComponent<MeshFilter>().mesh.bounds.size);
+    // [SerializeField]
+    // [Header("Buffer Lidar", order = 999)]
+    // BufferSensorComponent m_BufferSensorLidar;
+
+    // [SerializeField]
+    // [Header("Buffer Wheels", order = 999)]
+    // BufferSensorComponent m_BufferSensorWheels;
+    
+    
+    // Communicate with other objects here
+    private void Start() {
+        m_collider = GetComponent<Collider>();    
+
+        // Init connected controllers 
         settings = FindObjectOfType<MecanumDriveAgentSettings>();    
         decisionRequester = FindObjectOfType<DecisionRequester>();
         behaviorParameters = FindObjectOfType<BehaviorParameters>();
-        envController = FindObjectOfType<EnvController>();
+        arenaBounds = arena.GetComponent<Collider>().bounds;
+
+        // Init game controller
         playerController = new PlayerControls();
         playerController.Robot.Enable();    
         playerController.Robot.Right.Enable();
         playerController.Robot.Left.Enable();
         playerController.Robot.Switch.Enable();
+
+        // Init other local variables
         max_rads_per_second = (settings.rpm / 60.0f) * (2f * (Mathf.PI));
         max_degs_per_second = settings.rpm * 6f;
-        robotStartingPosition = transform.position;        
+        robotStartingPosition = transform.position;    
+        goalStartingPosition = targetTransform.position;    
+
+        // Keeps the robot moving in straight lines
+        frame.solverVelocityIterations = 25;
+
+        // Less noise to AI
+        frame.solverIterations = 25;
+
+        wheels = new List<ArticulationBody>() { TL, TR, BL, BR };
+
     }
-   
+
+    private void ResetGoal() {
+        Vector3 pos = GenerateNewSpawn();
+        pos.y = goalStartingPosition.y;
+        targetTransform.SetPositionAndRotation(pos, targetTransform.localRotation);
+    }
+
     public override void OnEpisodeBegin()
     {   
+        // Reset Robot and Goal positions
+        ResetRobot();
+        ResetGoal();
+
+        // Init initial state and action/drive variables
         previousState = currentState = GetState();
         float[] driveComponents = { 0f, 0f, 0f, 0f };
         currentActions.rawComponents = new List<float>(driveComponents);
@@ -142,118 +195,162 @@ public class MecanumDriveController : Agent
         previousActions = currentActions; 
         lastDistanceToGoal = currentState.distanceToGoal;
     }
-
-    private void ResetRobot() {
-        Quaternion newRotation = Quaternion.Euler(-90, 0, Random.Range(0.0f, 360.0f));
-        Vector3 newPosition = envController.GenerateNewSpawn();
-        ArticulationBody frame = gameObject.GetComponent<ArticulationBody>();
-
+    private void StopRobot() {
+        // Zero out Articulation velocities for frame and wheels
         TL.velocity = Vector3.zero;
         TR.velocity = Vector3.zero;
         BL.velocity = Vector3.zero;
         BR.velocity = Vector3.zero;
         frame.velocity = Vector3.zero;
+    }
+    private void ResetRobot() {
         
+        StopRobot();
+
+        // Set new location for frame
+        Quaternion newRotation = Quaternion.Euler(-90, 0, Random.Range(0.0f, 360.0f));
+        Vector3 newPosition = GenerateNewSpawn();
         newPosition.y = transform.position.y;
-        targetTransform.position = newPosition;
-        frame.TeleportRoot(newPosition, transform.rotation);
+        transform.position = newPosition;
+        transform.rotation = newRotation;
+        frame.TeleportRoot(transform.position, transform.rotation);
     }
 
-    private void FixedUpdate() {
-        previousState = currentState;
-        currentState = GetState();
-        AddReward(getReward(currentState));
-        if (!settings.useDiscreteActions) { TransitionDependantRewards(previousState, currentState, previousActions, currentActions); }
-        lastDistanceToGoal = currentState.distanceToGoal;
-    }
+    private float getReward(State CurrentState, State PreviousState) {
 
-    private float getReward(State CurrentState) {
-        float totalReward = 0.0f;
-
-        // Punish each step
-        totalReward += settings.stepReward;
-        
-        // Reward/punish if we get closer/farthur to/from goal
-        float deltaDistance = (lastDistanceToGoal - CurrentState.distanceToGoal) * 1000f; // in mm
-        float milliPerSecond = ((max_degs_per_second) / 360f) * (settings.wheelDiameter * Mathf.PI);
-        float maxTravel = milliPerSecond * Time.fixedDeltaTime * decisionRequester.DecisionPeriod; 
-        maxTravel /= 5f; // TODO: Magic number. Need to fix the physics on articulation xDrive to move at more accurate speed. Currently torque is too low.
-        
-        // assuming we are not just spinning in circles
-        if (NearestNth(CurrentState.linearVelocity.magnitude * 1000f, 1) > 0f) {
-            float deltaDistanceReward = Mathf.Clamp(deltaDistance / maxTravel, -1f, 1f);
-            Debug.Log(deltaDistanceReward);
-            totalReward += deltaDistanceReward;
-        } 
+        float totalReward = 0f;
 
         // Reward if agent is facing goal
         Vector3 toPosition = Vector3.Normalize(targetTransform.position - transform.position);
-        float lookAtTargetReward = Vector3.Dot(transform.right, toPosition); // (   + 1f) * .5F; // for 0 to 1
-        totalReward += lookAtTargetReward;
+        float lookAtTargetReward = Vector3.Dot(transform.right, toPosition);
+        if (float.IsNaN(lookAtTargetReward)) {
+            lookAtTargetReward = 0f;
+        }
+
+        totalReward += (settings.lookAtTargetReward * lookAtTargetReward / MaxStep);
+
+        // Reward marginal movements towards goal
+        // float milliPerSecond = ((max_degs_per_second) / 360f) * (settings.wheelDiameter * Mathf.PI);
+        // float maxTravel = milliPerSecond * Time.fixedDeltaTime * decisionRequester.DecisionPeriod;
+        // float deltaDistanceToGoalReward = Mathf.Clamp(NearestNth(previousState.distanceToGoal - CurrentState.distanceToGoal, 3) / (maxTravel / 1000f), -1f, 1f);
+        // totalReward += (settings.deltaDistanceReward * deltaDistanceToGoalReward / MaxStep);
+
+        // Punish if agent's forward movement deviates to much relative to previous action (by 45 in any direction)
+        // Vector3 lastDirection = Quaternion.Inverse(PreviousState.localRotation) * PreviousState.linearVelocity;
+        // Vector3 currentDirection = Quaternion.Inverse(CurrentState.localRotation) * CurrentState.linearVelocity;
+        // float relativeDirectionAngle;
+        // if (
+        //     NearestNth(currentActions.LinearDirection.magnitude, 2) == 0f || 
+        //     NearestNth(PreviousState.linearVelocity.x, 2) == 0f || 
+        //     NearestNth(CurrentState.linearVelocity.magnitude, 2) == 0f
+        // ) {
+        //     relativeDirectionAngle = 0.0f;
+        // } else {
+        //     relativeDirectionAngle = Vector3.Angle(lastDirection, currentDirection);
+        // }
+        // if (Mathf.Abs(relativeDirectionAngle) > 45f) {    
+        //     AddReward(-1f);
+        // }
+        
+        // Reward if withing goal radius (end condition)
+        if (CurrentState.distanceToGoal < settings.minDistanceToGoal) { 
+            totalReward += settings.goalReward;
+            ResetGoal();
+        }
+
+        // Step reward
+        totalReward += (settings.totalStepReward / MaxStep);
 
         return totalReward;
     }
 
-    private void TransitionDependantRewards(State PreviousState, State CurrentState, Actions PreviousActions, Actions CurrentActions) {
-        
-        // Punish if agent's forward movement deviates to much relative to previous action (by 45 in any direction)
-        Vector3 lastDirection = Quaternion.Inverse(PreviousState.localRotation) * PreviousState.linearVelocity;
-        Vector3 currentDirection = Quaternion.Inverse(CurrentState.localRotation) * CurrentState.linearVelocity;
-        float relativeDirectionAngle;
-        if (
-            NearestNth(currentActions.LinearDirection.magnitude, 2) == 0f || 
-            NearestNth(PreviousState.linearVelocity.x, 2) == 0f || 
-            NearestNth(CurrentState.linearVelocity.magnitude, 2) == 0f
-        ) {
-            relativeDirectionAngle = 0.0f;
-        } else {
-            relativeDirectionAngle = Vector3.Angle(lastDirection, currentDirection);
-        }
-        if (Mathf.Abs(relativeDirectionAngle) > 45f) {    
-            AddReward(-1f);
-        }
-    }
-
     private State GetState() {
+        Vector3 trueCenter =  GetComponent<Renderer>().bounds.center;
         return new State(){
             forwardVector = transform.forward,
             upVector = transform.up,
             localPosition = transform.localPosition,
             localRotation = transform.localRotation,
-            linearVelocity = transform.InverseTransformDirection(gameObject.GetComponent<ArticulationBody>().velocity),
-            angularVelocity = transform.InverseTransformDirection(gameObject.GetComponent<ArticulationBody>().angularVelocity),
-            distanceToGoal = NearestNth(Vector3.Distance(transform.localPosition,  targetTransform.localPosition), 3)
+            linearVelocity = frame.velocity,
+            angularVelocity = frame.angularVelocity,
+            distanceToGoal = Vector3.Distance(trueCenter, targetTransform.position),
         };
     }
 
     public override void CollectObservations(VectorSensor sensor) 
-    {        
-        State state = GetState();
+    {   
 
-        // Current agent velocities
-        sensor.AddObservation(map(Mathf.Clamp(state.linearVelocity.x, -1f, 1f), -1f, 1f, 0f, 1f));
-        sensor.AddObservation(map(Mathf.Clamp(state.linearVelocity.y, -1f, 1f), -1f, 1f, 0f, 1f));
-        sensor.AddObservation(map(Mathf.Clamp(state.angularVelocity.z, -1f, 1f), -1f, 1f, 0f, 1f));
+
+        previousState = currentState;     
+        currentState = GetState();
+
+        /*
+        // Linear/Angular Velocities of the main body
+        sensor.AddObservation(currentState.linearVelocity.x);
+        sensor.AddObservation(currentState.linearVelocity.y);
+        sensor.AddObservation(currentState.angularVelocity.z);
+
+        // Calculate distance to goal. Make detectable distance the same as lidar range
+        float distanceToGoal = currentState.distanceToGoal;
+        sensor.AddObservation(Mathf.Clamp(distanceToGoal / lidar.LaserLength, 0f, 1f));
 
         // Relative angle to goal
         Vector3 toPosition = Vector3.Normalize(targetTransform.position - transform.position);
-        float angleToPosition = Vector3.Angle(transform.right, toPosition);
-        sensor.AddObservation(Mathf.Clamp(angleToPosition / 180f, 0f, 1f));
+        float angleToPosition = Vector3.SignedAngle(transform.right, toPosition, Vector3.up);
+        sensor.AddObservation(Mathf.Clamp(angleToPosition / 180f, -1f, 1f));
 
-        // Calculate distance to goal
-        float distanceToGoal = state.distanceToGoal;
-        sensor.AddObservation(Mathf.Clamp(distanceToGoal / settings.maxMeasurableDistanceToGoal, 0f, 1f));
+        // Uses attention model to track wheel positions
+        for (int wheel = 0; wheel < 4; wheel++) {
+            float[] wheelObservation = new float[5];
+            ArticulationBody w = wheels[wheel];
+            Vector3 trueCenter = w.GetComponent<Renderer>().bounds.center;
+            wheelObservation[0] = (float)wheel / 4f; // ID of this wheel
+            wheelObservation[1] = GetJointVelocity(w) / max_rads_per_second; // Relative velocity of the wheels
+            wheelObservation[2] = (GetAxisRotation(w) % 360f) / 360f; // Relative location of the wheels
+            wheelObservation[3] = previousActions.rawComponents[wheel]; // Add the last drive components
+            wheelObservation[4] = Mathf.Clamp(Vector3.Distance(trueCenter, targetTransform.position) / lidar.LaserLength, 0f, 1f); // Distance of this wheel to goal
+            m_BufferSensorWheels.AppendObservation(wheelObservation);
+        }
         
-        // Add the last actions taken by the agent
-        foreach (float drive in previousActions.rawComponents) {
-            sensor.AddObservation(map(Mathf.Clamp(drive, -1f, 1f), -1f, 1f, 0f, 1f));
+        // Use attention model to track lidar at angles
+        List<Packet> packets = lidar.UpdateSensor(false, true, settings.numLidarSamples, 360.0f);
+        for (int packet = 0; packet < settings.numLidarSamples; packet++) {
+            float[] lidarObservation = new float[4];
+            Packet p = packets[packet];
+            lidarObservation[0] = (float)packet / (float)settings.numLidarSamples; // ID of this lidar sample
+            lidarObservation[1] = p.distance; // Distance to detected object
+            lidarObservation[2] = p.theta; // Local Angle
+            lidarObservation[3] = Mathf.Clamp(to360(angleToPosition + (p.theta * 360f)) / 360f, 0f, 1f); // Relative Angle to goal
+            m_BufferSensorLidar.AppendObservation(lidarObservation);
+        } */
+        
+        // Linear/Angular Velocities of the main body and wheels 
+        sensor.AddObservation(currentState.linearVelocity.x);
+        sensor.AddObservation(currentState.linearVelocity.y);
+        sensor.AddObservation(currentState.angularVelocity.z);
+
+        // Relative angle to goal
+        Vector3 toPosition = Vector3.Normalize(targetTransform.position - transform.position);
+        float angleToPosition = Vector3.SignedAngle(transform.right, toPosition, Vector3.up);
+        sensor.AddObservation(Mathf.Clamp(angleToPosition / 180f, -1f, 1f));
+
+        // Calculate distance to goal. Make detectable distance the same as lidar range
+        float distanceToGoal = currentState.distanceToGoal;
+        sensor.AddObservation(Mathf.Clamp(distanceToGoal / lidar.LaserLength, 0f, 1f));
+
+         for (int wheel = 0; wheel < 4; wheel++) {
+            float[] wheelObservation = new float[5];
+            ArticulationBody w = wheels[wheel];
+            sensor.AddObservation(GetJointVelocity(w) / max_rads_per_second); // Linear/Angular Velocities of wheels 
+            sensor.AddObservation((GetAxisRotation(w) % 360f) / 360f); // Relative location of the wheels
+            sensor.AddObservation(previousActions.rawComponents[wheel]); // Add the last drive components
         }
 
         // Current lidar readings
-        List<Packet> packets = lidar.UpdateSensor(false, true, 20, 360.0f);
+        List<Packet> packets = lidar.UpdateSensor(false, true, settings.numLidarSamples, 360.0f);
         foreach (Packet packet in packets) {
-            sensor.AddObservation(packet.distance);
-            sensor.AddObservation(packet.theta);
+            sensor.AddObservation(packet.distance);            
+            // sensor.AddObservation(packet.theta);
         }
     }
 
@@ -271,10 +368,12 @@ public class MecanumDriveController : Agent
                 return 0f;
         }
     }
+    
     public override void OnActionReceived(ActionBuffers actions)
     {
-         Actions newActions = new Actions();
-         Actions lastActions = currentActions;
+
+        Actions newActions = new Actions();
+        Actions lastActions = currentActions;
 
         if (settings.useDiscreteActions) {
             newActions.rawComponents = new List<float>();
@@ -312,18 +411,20 @@ public class MecanumDriveController : Agent
                 new Vector2() {
                     x = (zRotation * settings.velocityIncrement),
                     y = 0f}
-                + lastActions.AngularDirection), 1.0f);
+                    + lastActions.AngularDirection), 1.0f);
 
-            MecanumDrives fullDrives = GetAngularDrives( newActions.AngularDirection ) + GetLinearDrives( newActions.LinearDirection );
+
+            /* Add linear and angular components to get 4 drives which represent 4 wheel speeds */
+            MecanumDrives fullDrives =  GetLinearDrives( newActions.LinearDirection ) + GetAngularDrives( newActions.AngularDirection );
             setWheel(TR, -fullDrives.TR);
             setWheel(BL, fullDrives.BL);
             setWheel(TL, -fullDrives.TL);
             setWheel(BR, fullDrives.BR);
- 
+
             newActions.rawComponents = new List<float>();
+            newActions.rawComponents.Add(-fullDrives.TL);
             newActions.rawComponents.Add(-fullDrives.TR);
             newActions.rawComponents.Add(fullDrives.BL);
-            newActions.rawComponents.Add(-fullDrives.TL);
             newActions.rawComponents.Add(fullDrives.BR);
             
         } else {
@@ -349,8 +450,8 @@ public class MecanumDriveController : Agent
             setWheel(TL, -fullDrives.TL);
             setWheel(BR, fullDrives.BR);
         }
-       
-        // Save for later
+
+        AddReward(getReward(currentState, previousState));
         previousActions = currentActions;
         currentActions = newActions;
     }
@@ -359,11 +460,6 @@ public class MecanumDriveController : Agent
     {
         Vector2 r = playerController.Robot.Right.ReadValue<Vector2>();
         Vector2 l = playerController.Robot.Left.ReadValue<Vector2>();
-
-        // Vector2 r = new Vector2() {
-        //     x = 0,
-        //     y = 1f
-        // };
 
         if (settings.useDiscreteActions) {
             ActionSegment<int> discreteActions = actionsOut.DiscreteActions;
@@ -442,28 +538,49 @@ public class MecanumDriveController : Agent
     }
 
     private void OnTriggerEnter(Collider other) {
-        if (other.TryGetComponent<Goal>(out Goal goal)) {
+        if (other.gameObject.CompareTag("Goal")) {
             AddReward(settings.goalReward);
-            EndEpisode();
-            ResetRobot();
-            Vector3 pos = envController.GenerateNewSpawn();
-            pos.y = targetTransform.position.y;
-            targetTransform.position = pos;
-        } else if (other.TryGetComponent<Wall>(out Wall wall)) {
+            ResetGoal();
+        } else if (other.gameObject.CompareTag("Wall")) {
             AddReward(settings.collisionReward);
             EndEpisode();
-            ResetRobot();
-            Vector3 pos = envController.GenerateNewSpawn();
-            pos.y = targetTransform.position.y;
-            targetTransform.position = pos;
         }
     }
 
-    private float GetAxisRotation(ArticulationBody articulation)
+    // private void OnTriggerStay(Collider other) {
+    //     if (other.TryGetComponent<Wall>(out Wall wall)) {
+    //         AddReward(settings.collisionReward);
+    //         // EndEpisode();
+    //     }
+    // }
+
+    // private void OnCollisionStay(Collision other) {
+    //     if (other.gameObject.CompareTag("Wall")) {
+    //         EndEpisode();
+    //         AddReward(settings.collisionReward);
+    //     }
+    // }    
+
+    // private void OnCollisionEnter(Collision other) {
+    //     if (other.gameObject.CompareTag("Wall")) {
+    //         AddReward(settings.collisionReward);
+    //         EndEpisode();
+    //     } else if (other.gameObject.CompareTag("Goal")) {
+    //         AddReward(settings.goalReward);
+    //         ResetGoal();
+    //     }
+    // }
+
+    private float GetAxisRotation(ArticulationBody articulation, bool radians=false)
     {
         float currentRotationRads = articulation.jointPosition[0];
         float currentRotation = Mathf.Rad2Deg * currentRotationRads;
         return currentRotation;
+    }
+
+    //  In rad/s (radians per second)
+    private float GetJointVelocity(ArticulationBody articulation) {
+        return articulation.jointVelocity[0];
     }
 
     private void setDrive(float rotationGoal, float currentRotation,  float targetVelocity, float forceLimit, ArticulationBody articulation)
@@ -480,8 +597,7 @@ public class MecanumDriveController : Agent
     private void setVelocity(float targetVelocity, float forceLimit, ArticulationBody articulation) 
     {
         ArticulationDrive drive = articulation.xDrive;
-        // articulation.maxAngularVelocity = 1f;
-        articulation.solverVelocityIterations = 20;
+        articulation.solverVelocityIterations = 25;
         drive.targetVelocity = targetVelocity; 
         drive.forceLimit = forceLimit;
         drive.stiffness = 0f;
@@ -518,17 +634,16 @@ public class MecanumDriveController : Agent
         // Constrain to 0 <--> 360
         angle %= 360f;
         angle = angle < 0.0 ? angle + 360 : angle;
-
         // Convert 0 <-> 360 to 0 <-> 180 
         // angle = angle > 180f ? angle - 180f : angle;
         return angle;    
     }
-    private Vector3 clipAngles(Vector3 angles) {
-        angles.x = to360(angles.x);
-        angles.y = to360(angles.y);
-        angles.z = to360(angles.z);
-        return angles;
-    }
+    // private Vector3 clipAngles(Vector3 angles) {
+    //     angles.x = to360(angles.x);
+    //     angles.y = to360(angles.y);
+    //     angles.z = to360(angles.z);
+    //     return angles;
+    // }
 
     MecanumDrives GetAngularDrives(Vector3 rotation) {
         MecanumDrives drives;
@@ -614,7 +729,7 @@ public class MecanumDriveController : Agent
         if (place <= 0) {
             return Mathf.Floor(n);
         }
-        
+
         float scalar = Mathf.Pow(10f, place);
         return (float)((int)(n * scalar)) / scalar;
     }
@@ -624,25 +739,25 @@ public class MecanumDriveController : Agent
         return (value - fromLow) * (toHigh - toLow) / (fromHigh - fromLow) + toLow;
     }
 
-    // public struct LineVector 
-    // {
-    //     private Vector2 p;
-    //     private Vector2 q;
+    public Vector3 GenerateNewSpawn()
+    {
+        bool foundNewSpawnLocation = false;
+        Vector3 newSpawnPos = Vector3.zero;
 
-    //     public float X; // X component
-    //     public float Y; // Y component
-    //     public float M; // Magnitude
-    //     public float A; // Angle of unit circle 
+        while (foundNewSpawnLocation == false)
+        {
+            float randomPosX = Random.Range(-arenaBounds.extents.x * spawnRadius,
+                arenaBounds.extents.x * spawnRadius);
 
-    //     public LineVector(Vector2 p1, Vector2 p2) {
-    //         p = p1;
-    //         q = p2;
-    //         X = q.x - p.x;
-    //         Y = q.y - p.y;
-    //         M = Mathf.Sqrt(Mathf.Pow(X, 2) + Mathf.Pow(Y, 2));
-    //         A = Mathf.Atan2(Y, X);
-    //         A *= 180f / Mathf.PI; // To degrees -180 <-> 180
-    //         A = A < 0f ? A + 360f : A;  // To 0 <-> 360
-    //     }
-    // };
+            float randomPosZ = Random.Range(-arenaBounds.extents.z * spawnRadius,
+                arenaBounds.extents.z * spawnRadius);
+            newSpawnPos = arena.transform.position + new Vector3(randomPosX, 1f, randomPosZ);
+            if (Physics.CheckBox(newSpawnPos, new Vector3(.5f, 0.01f, .5f)) == false)
+            {
+                foundNewSpawnLocation = true;
+            }
+        }
+       
+        return newSpawnPos;
+    }
 }
