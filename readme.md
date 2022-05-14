@@ -16,7 +16,7 @@ The purpose of this project is to design and train a reinforcement learning agen
         - pip3 install torch~=1.7.1 -f https://download.pytorch.org/whl/torch_stable.html
         - OpenAI-baslines
     * Import Assets
-        * (/Autonomous Vehicle Agents/Assets/robot.blend)[https://drive.google.com/drive/folders/18gfgXw4FeOUl0M7MnyoCyLha8bqXCzx2?usp=sharing]
+        * [/Autonomous Vehicle Agents/Assets/robot.blend](https://drive.google.com/drive/folders/18gfgXw4FeOUl0M7MnyoCyLha8bqXCzx2?usp=sharing)
     * Open Unity Hub
         - Install unity version 2021.1.18 or higher
         - Import "Autonomous Vehicle Agents" project from disk
